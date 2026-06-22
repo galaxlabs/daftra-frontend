@@ -1,0 +1,1 @@
+import {describe,it,expect} from "vitest";import {authHeader} from "./api";describe("api helpers",()=>{it("creates Frappe token header",()=>expect(authHeader({apiKey:"key",apiSecret:"secret"})).toBe("token key:secret"))});
