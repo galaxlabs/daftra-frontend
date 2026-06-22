@@ -1,1 +1,1 @@
-import {describe,it,expect} from "vitest";import {authHeader} from "./api";describe("api helpers",()=>{it("creates Frappe token header",()=>expect(authHeader({apiKey:"key",apiSecret:"secret"})).toBe("token key:secret"))});
+import {describe,it,expect} from "vitest";import {deskUrl} from "./api";describe("api helpers",()=>{it("creates a Desk list route",()=>expect(deskUrl("Sales Invoice")).toContain("/app/sales-invoice/view/list"))});
