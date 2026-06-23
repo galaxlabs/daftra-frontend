@@ -66,6 +66,7 @@ const MODULE_LABELS = {
   Tax: { en: "Tax", ar: "الضرائب" },
   Settings: { en: "Settings", ar: "الإعدادات" },
   "Print Studio": { en: "Print Studio", ar: "استوديو الطباعة" },
+  "Workflow Studio": { en: "Workflow Studio", ar: "استوديو التدفق" },
 };
 
 const STRINGS = {
@@ -84,6 +85,7 @@ const STRINGS = {
     open_workspace: "Open workspace",
     preview_print: "Preview print",
     open_print_studio: "Open Print Studio",
+    workflow_studio: "Workflow Studio",
     setup_eyebrow: "First-run setup",
     wizard_title: "Choose your business type",
     wizard_copy: "Set the company profile, language, and module mix before the workspace opens.",
@@ -142,6 +144,7 @@ const STRINGS = {
     open_workspace: "فتح مساحة العمل",
     preview_print: "معاينة الطباعة",
     open_print_studio: "فتح استوديو الطباعة",
+    workflow_studio: "استوديو التدفق",
     setup_eyebrow: "إعداد أول تشغيل",
     wizard_title: "اختر نوع النشاط",
     wizard_copy: "اضبط ملف الشركة واللغة ومجموعة الوحدات قبل فتح مساحة العمل.",
@@ -537,9 +540,249 @@ function PrintStudio({ boot, language, t, setNotice, initialDocument, onReturn }
   );
 }
 
+function WorkflowStudio({ boot, language, t, setNotice, onOpenPrintStudio }) {
+  const [catalog, setCatalog] = useState({ clients: [], products: [], suppliers: [] });
+  const [loading, setLoading] = useState(true);
+  const [validation, setValidation] = useState(null);
+  const [search, setSearch] = useState("");
+  const [form, setForm] = useState({
+    client: "",
+    product: "",
+    quantity: 1,
+    rate: 0,
+    vat_rate: 15,
+    invoice_layout: boot.setup?.business_type === "Services" ? "Materials & Services" : "TAX Invoice",
+    payment_method: "Bank Transfer",
+    description_of_work: "",
+    notes: "",
+    due_date: "",
+  });
+
+  useEffect(() => {
+    call("daftra.api.sales_api.get_workflow_catalog")
+      .then((result) => setCatalog(result))
+      .catch((error) => setNotice(error.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!form.client && catalog.clients.length) {
+      setForm((current) => ({ ...current, client: catalog.clients[0].name }));
+    }
+    if (!form.product && catalog.products.length) {
+      setForm((current) => ({ ...current, product: catalog.products[0].name }));
+    }
+  }, [catalog.clients, catalog.products]);
+
+  useEffect(() => {
+    if (!form.client) return;
+    call("daftra.api.sales_api.get_sales_workflow_context", { args: { client_name: form.client, product_name: form.product } })
+      .then((result) => {
+        const next = {};
+        if (result.client) {
+          next.description_of_work = result.client.display_name ? `${result.client.display_name} service cycle` : form.description_of_work;
+          if (!form.due_date && result.due_date) next.due_date = result.due_date;
+        }
+        if (result.product) {
+          next.product = result.product.name;
+          next.rate = Number(result.product.selling_price || form.rate || 0);
+          next.vat_rate = Number(result.product.vat_rate || form.vat_rate || 0);
+          if (!form.description_of_work) next.description_of_work = result.product.description || result.product.product_name;
+        }
+        if (Object.keys(next).length) setForm((current) => ({ ...current, ...next }));
+      })
+      .catch(() => {});
+  }, [form.client, form.product]);
+
+  function setClient(name) {
+    setForm((current) => ({ ...current, client: name, due_date: current.due_date }));
+  }
+
+  function setProduct(name) {
+    setForm((current) => ({ ...current, product: name }));
+  }
+
+  function validateLocal() {
+    const items = [{ qty: Number(form.quantity || 0), rate: Number(form.rate || 0), vat_rate: Number(form.vat_rate || 0) }];
+    return call("daftra.api.sales_api.validate_sales_invoice_payload", {
+      mutation: true,
+      args: {
+        payload: {
+          client: form.client,
+          invoice_layout: form.invoice_layout,
+          description_of_work: form.description_of_work,
+          notes: form.notes,
+          due_date: form.due_date,
+          items,
+          discount_amount: 0,
+          deposit_amount: 0,
+          adjustment_amount: 0,
+        },
+      },
+    }).then((result) => {
+      setValidation(result);
+      if (!result.ok) {
+        setNotice(result.errors.join(" · "));
+      } else {
+        setNotice("Workflow rules validated.");
+      }
+      return result;
+    });
+  }
+
+  const selectedClient = catalog.clients.find((item) => item.name === form.client);
+  const selectedProduct = catalog.products.find((item) => item.name === form.product);
+  const subtotal = Number(form.quantity || 0) * Number(form.rate || 0);
+  const vatTotal = subtotal * Number(form.vat_rate || 0) / 100;
+  const grandTotal = subtotal + vatTotal;
+
+  return (
+    <section className="workflow-studio">
+      <div className="section-head">
+        <div>
+          <span className="eyebrow">{t("workflow_studio")}</span>
+          <h2>{t("service_mode")}</h2>
+        </div>
+        <button className="secondary" type="button" onClick={() => onOpenPrintStudio({ doctype: "Sales Invoice" })}>
+          <Printer />
+          {t("open_print_studio")}
+        </button>
+      </div>
+
+      <div className="workflow-grid">
+        <section className="workflow-card form-card">
+          <div className="workflow-head">
+            <div>
+              <span className="eyebrow">{boot.setup?.business_type || "Services"}</span>
+              <h3>{t("service_cycle")}</h3>
+            </div>
+            <div className="workflow-badge">{loading ? t("loading") : `${catalog.clients.length} clients`}</div>
+          </div>
+          <div className="field-grid">
+            <label>
+              Client
+              <select value={form.client} onChange={(event) => setClient(event.target.value)}>
+                <option value="">Select client</option>
+                {catalog.clients.map((client) => (
+                  <option value={client.name} key={client.name}>{client.business_name || `${client.first_name || ""} ${client.last_name || ""}`.trim() || client.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Product / Service
+              <select value={form.product} onChange={(event) => setProduct(event.target.value)}>
+                <option value="">Select item</option>
+                {catalog.products.map((product) => (
+                  <option value={product.name} key={product.name}>{product.product_name || product.product_code}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Layout
+              <select value={form.invoice_layout} onChange={(event) => setForm({ ...form, invoice_layout: event.target.value })}>
+                <option>Materials & Services</option>
+                <option>Default Invoice</option>
+                <option>TAX Invoice</option>
+                <option>Receipt</option>
+              </select>
+            </label>
+            <label>
+              Payment method
+              <select value={form.payment_method} onChange={(event) => setForm({ ...form, payment_method: event.target.value })}>
+                <option>Bank Transfer</option>
+                <option>Cash</option>
+                <option>Card</option>
+                <option>Cheque</option>
+              </select>
+            </label>
+            <label>
+              Quantity
+              <input className="big-input" type="number" min="1" step="1" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} />
+            </label>
+            <label>
+              Rate
+              <input className="big-input" type="number" min="0" step="0.01" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} />
+            </label>
+            <label>
+              VAT %
+              <input className="big-input" type="number" min="0" step="0.01" value={form.vat_rate} onChange={(event) => setForm({ ...form, vat_rate: event.target.value })} />
+            </label>
+            <label>
+              Due date
+              <input className="big-input" type="date" value={form.due_date} onChange={(event) => setForm({ ...form, due_date: event.target.value })} />
+            </label>
+          </div>
+          <label>
+            Description of work
+            <textarea className="big-textarea" value={form.description_of_work} onChange={(event) => setForm({ ...form, description_of_work: event.target.value })} placeholder="Service scope, timeline, and notes" />
+          </label>
+          <label>
+            Internal notes
+            <textarea className="big-textarea" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Private handling instructions" />
+          </label>
+          <div className="workflow-actions">
+            <button className="secondary" type="button" onClick={validateLocal}>
+              <CheckCircle2 />
+              Validate
+            </button>
+            <button className="primary" type="button" onClick={() => onOpenPrintStudio({ doctype: "Sales Invoice" })}>
+              <ArrowUpRight />
+              Dynamic print
+            </button>
+          </div>
+        </section>
+
+        <aside className="workflow-side">
+          <div className="workflow-summary">
+            <div>
+              <span>Client</span>
+              <strong>{selectedClient?.business_name || selectedClient?.first_name || "Choose a client"}</strong>
+            </div>
+            <div>
+              <span>Service</span>
+              <strong>{selectedProduct?.product_name || "Choose a service"}</strong>
+            </div>
+            <div>
+              <span>Subtotal</span>
+              <strong>{subtotal.toFixed(2)}</strong>
+            </div>
+            <div>
+              <span>VAT</span>
+              <strong>{vatTotal.toFixed(2)}</strong>
+            </div>
+            <div>
+              <span>Total</span>
+              <strong>{grandTotal.toFixed(2)}</strong>
+            </div>
+          </div>
+          <div className="workflow-note">
+            <Sparkles />
+            <div>
+              <strong>Auto-fill logic</strong>
+              <span>Client credit periods, service descriptions, VAT rates, and due dates are pulled from the backend catalog.</span>
+            </div>
+          </div>
+          <div className="workflow-note">
+            <ShieldCheck />
+            <div>
+              <strong>ZATCA logic</strong>
+              <span>The server validates totals, VAT identity, and tax-invoice requirements before submission.</span>
+            </div>
+          </div>
+          {validation && !validation.ok && (
+            <div className="validation-list">
+              {validation.errors.map((item) => <div key={item}>{item}</div>)}
+            </div>
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [boot, setBoot] = useState(DEFAULT_BOOT);
-  const [activeTab, setActiveTab] = useState("Sales");
+  const [activeTab, setActiveTab] = useState("Workflow Studio");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
@@ -677,7 +920,7 @@ function App() {
     );
   }
 
-  const navigation = [...moduleNames, "Print Studio"];
+  const navigation = ["Workflow Studio", ...moduleNames, "Print Studio"];
   const currentDocument = activeTab === "Print Studio" ? selectedDocument : filteredDocs[0] || null;
 
   return (
@@ -797,7 +1040,18 @@ function App() {
             />
           )}
 
-          {activeTab === "Print Studio" ? (
+          {activeTab === "Workflow Studio" ? (
+            <WorkflowStudio
+              boot={boot}
+              language={normalizeLanguage(language)}
+              t={t}
+              setNotice={setNotice}
+              onOpenPrintStudio={(doc) => {
+                setSelectedDocument(doc || null);
+                setActiveTab("Print Studio");
+              }}
+            />
+          ) : activeTab === "Print Studio" ? (
             <PrintStudio
               boot={boot}
               language={normalizeLanguage(language)}
