@@ -35,8 +35,18 @@ export async function getSession() {
 }
 
 export async function call(method, { mutation = false, args = {} } = {}) {
+  const url = new URL("/api/frappe", window.location.origin);
+  url.searchParams.set("method", method);
+  if (!mutation) {
+    Object.entries(args || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        url.searchParams.set(key, typeof value === "object" ? JSON.stringify(value) : String(value));
+      }
+    });
+  }
+
   return parse(
-    await fetch(`/api/frappe?method=${encodeURIComponent(method)}`, {
+    await fetch(url.toString(), {
       method: mutation ? "POST" : "GET",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

@@ -1,0 +1,163 @@
+import { useEffect, useMemo, useState } from "react";
+import { LogOutIcon } from "lucide-react";
+import { toast } from "sonner";
+
+import { AppHeader } from "@/components/app/app-header";
+import { AppSidebar } from "@/components/app/app-sidebar";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ConnectionDialog } from "@/features/auth/connection-dialog";
+import { DashboardPage } from "@/features/dashboard/dashboard-page";
+import { PrintPage } from "@/features/print/print-page";
+import { SetupWizard } from "@/features/setup/setup-wizard";
+import { WorkflowPage } from "@/features/workflow/workflow-page";
+import { WorkspacePage } from "@/features/workspace/workspace-page";
+import { getSession, logout, call, saveFrontendSetup } from "@/lib/api";
+import { createTranslator, moduleLabel, normalizeLanguage } from "@/lib/i18n";
+
+const DEFAULT_BOOT = { stats: {}, modules: {}, enabled_modules: {}, scenarios: [], low_stock: [], recent_activity: [], setup: {}, document_catalog: [], reports: [], settings: [], plugins: [], readiness: {}, blueprint: { sections: [] } };
+
+function useLocalString(key, fallback) {
+  const [value, setValue] = useState(() => window.localStorage.getItem(key) || fallback);
+  useEffect(() => window.localStorage.setItem(key, value), [key, value]);
+  return [value, setValue];
+}
+
+function formatMoney(value, currency, language) {
+  return new Intl.NumberFormat(language === "ar" ? "ar-EG" : "en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(Number(value || 0));
+}
+
+export default function App() {
+  const [boot, setBoot] = useState(DEFAULT_BOOT);
+  const [activeTab, setActiveTab] = useState("Workflow Studio");
+  const [search, setSearch] = useState("");
+  const [session, setSession] = useState(null);
+  const [connect, setConnect] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [language, setLanguage] = useLocalString("daftra-language", "en");
+
+  const normalizedLanguage = normalizeLanguage(language);
+  const t = useMemo(() => createTranslator(normalizedLanguage), [normalizedLanguage]);
+  const navigation = useMemo(() => ["Workflow Studio", ...Object.keys(boot.modules || {}), "Print Studio"], [boot.modules]);
+  const filteredDocs = useMemo(() => (boot.document_catalog || []).filter((item) => item.doctype.toLowerCase().includes(search.toLowerCase()) || item.module.toLowerCase().includes(search.toLowerCase())), [boot.document_catalog, search]);
+  const currentDocument = useMemo(() => selectedDocument || filteredDocs[0] || null, [selectedDocument, filteredDocs]);
+  const currencyNode = useMemo(() => formatMoney(boot.stats.total_invoice_amount, boot.setup?.default_currency || "SAR", normalizedLanguage), [boot.stats.total_invoice_amount, boot.setup?.default_currency, normalizedLanguage]);
+
+  useEffect(() => {
+    document.documentElement.lang = normalizedLanguage;
+    document.documentElement.dir = normalizedLanguage === "ar" ? "rtl" : "ltr";
+  }, [normalizedLanguage]);
+
+  useEffect(() => {
+    getSession().then((current) => {
+      setSession(current);
+      if (current) load();
+      else setConnect(true);
+    }).catch(() => setConnect(true));
+  }, []);
+
+  useEffect(() => {
+    if (boot.setup?.default_language && !window.localStorage.getItem("daftra-language")) {
+      setLanguage(normalizeLanguage(boot.setup.default_language));
+    }
+    setShowWizard(Boolean(session && boot.setup && !boot.setup.frontend_setup_completed));
+  }, [boot.setup, session, setLanguage]);
+
+  useEffect(() => {
+    if (activeTab !== "Print Studio") {
+      const moduleDocs = filteredDocs.filter((item) => item.module === activeTab);
+      if (moduleDocs.length) setSelectedDocument(moduleDocs[0]);
+    }
+  }, [activeTab, filteredDocs]);
+
+  async function load() {
+    try {
+      setBoot(await call("daftra.api.business_cycle.get_frontend_boot"));
+    } catch (error) {
+      toast.error(error.message);
+      if (String(error.message).toLowerCase().includes("sign")) setConnect(true);
+    }
+  }
+
+  async function signedIn() {
+    const current = await getSession();
+    setSession(current);
+    await load();
+  }
+
+  async function signOut() {
+    await logout();
+    setSession(null);
+    setBoot(DEFAULT_BOOT);
+    setConnect(true);
+  }
+
+  async function saveSetup(payload) {
+    await saveFrontendSetup(payload);
+    toast.success(t("save_setup"));
+    setShowWizard(false);
+    await load();
+  }
+
+  async function runScenario(key) {
+    const methods = { seed: "seed_demo_data", lead_to_cash: "run_sales_cycle", procure_to_stock: "run_purchase_cycle", service_job: "seed_demo_data", validate: "validate_business_cycle" };
+    const method = methods[key];
+    if (!method) return toast.message("Guided scenario only.");
+    try {
+      const result = await call(`daftra.api.business_cycle.${method}`, { mutation: key !== "validate" });
+      toast.success(key === "validate" ? "Business-cycle validation passed." : "Scenario completed successfully.");
+      if (key === "service_job") setActiveTab("Bookings");
+      await load();
+      return result;
+    } catch (error) {
+      toast.error(error.message);
+      return null;
+    }
+  }
+
+  const activeTabLabel = moduleLabel(activeTab, normalizedLanguage);
+  const workspaceDocument = activeTab === "Print Studio" ? currentDocument : currentDocument;
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(135,201,118,0.12),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.7),rgba(248,250,248,1))]">
+      <div className="hidden md:fixed md:inset-y-0 md:start-0 md:z-30 md:block md:w-80">
+        <AppSidebar navigation={navigation} activeTab={activeTab} onSelect={setActiveTab} language={normalizedLanguage} enabledModules={boot.enabled_modules} companyName={boot.setup?.company_name || session?.user} businessType={boot.setup?.business_type} />
+      </div>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="w-80 border-0 p-0">
+          <SheetHeader className="sr-only"><SheetTitle>Navigation</SheetTitle></SheetHeader>
+          <AppSidebar navigation={navigation} activeTab={activeTab} onSelect={(next) => { setActiveTab(next); setMobileOpen(false); }} language={normalizedLanguage} enabledModules={boot.enabled_modules} companyName={boot.setup?.company_name || session?.user} businessType={boot.setup?.business_type} />
+        </SheetContent>
+      </Sheet>
+
+      <div className="md:ps-80">
+        <AppHeader activeTab={activeTab} language={normalizedLanguage} t={t} search={search} onSearchChange={setSearch} onToggleLanguage={() => setLanguage((current) => normalizeLanguage(current) === "ar" ? "en" : "ar")} onOpenSetup={() => setShowWizard(true)} onRefresh={load} onOpenMobile={() => setMobileOpen(true)} />
+        <main className="px-4 pb-8 pt-6 md:px-8">
+          <div className="mb-6 flex items-center justify-end">
+            {session ? <Button variant="outline" className="rounded-2xl" onClick={signOut}><LogOutIcon data-icon="inline-start" />{t("sign_out")}</Button> : null}
+          </div>
+          <ScrollArea className="h-[calc(100vh-9rem)] pe-2">
+            <div className="pb-10">
+              {activeTab === "Workflow Studio" ? (
+                <WorkflowPage boot={boot} t={t} notify={(message) => toast(message)} onOpenPrintStudio={(doc) => { setSelectedDocument(doc || null); setActiveTab("Print Studio"); }} />
+              ) : activeTab === "Print Studio" ? (
+                <PrintPage initialDocument={currentDocument} t={t} notify={(message) => toast(message)} onReturn={() => setActiveTab("Sales")} />
+              ) : currentDocument ? (
+                <div className="grid gap-6">
+                  <DashboardPage boot={boot} currencyNode={currencyNode} t={t} activeTabLabel={activeTabLabel} selectedDocument={currentDocument} onSelectDocument={setSelectedDocument} onOpenPrintStudio={(doc) => { setSelectedDocument(doc || currentDocument); setActiveTab("Print Studio"); }} onRunScenario={runScenario} />
+                  <WorkspacePage document={workspaceDocument} t={t} notify={(message) => toast(message)} onOpenPrintStudio={(doc) => { setSelectedDocument(doc); setActiveTab("Print Studio"); }} />
+                </div>
+              ) : null}
+            </div>
+          </ScrollArea>
+        </main>
+      </div>
+
+      <ConnectionDialog open={connect} onClose={() => session && setConnect(false)} onSaved={signedIn} />
+      <SetupWizard open={showWizard} setup={boot.setup} t={t} onSave={saveSetup} onClose={() => setShowWizard(false)} />
+    </div>
+  );
+}
