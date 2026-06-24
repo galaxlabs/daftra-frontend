@@ -23,7 +23,7 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({});
 
-  const createTitle = useMemo(() => ({ Client: t("create_client"), "Client Contact": t("create_contact"), Appointment: t("create_appointment"), "CRM Deal": t("create_crm_deal"), "Insurance Agent": t("create_insurance_agent"), "Credit Type": t("create_credit_type"), "Credit Package": t("create_credit_package"), "Credit Charge": t("create_credit_charge"), "Credit Usage": t("create_credit_usage"), Product: t("create_product"), Warehouse: t("create_warehouse"), "Price List": t("create_price_list"), "Price List Rule": t("create_price_list_rule"), "Stock Entry": t("create_stock_entry"), Stocktaking: t("create_stocktaking"), Requisition: t("create_requisition"), Booking: t("create_booking"), "Time Entry": t("create_time_entry"), "Sales Invoice": t("create_invoice"), "Sales Quotation": t("create_quotation"), "Invoice Payment": t("create_payment"), "Recurring Invoice": t("create_recurring_invoice"), "Daftra Project": t("create_project") }[document?.doctype] || t("create_record")), [document?.doctype, t]);
+  const createTitle = useMemo(() => ({ Client: t("create_client"), Supplier: t("create_supplier"), "Purchase Request": t("create_purchase_request"), "Purchase Quotation": t("create_purchase_quotation"), "Purchase Order": t("create_purchase_order"), "Purchase Invoice": t("create_purchase_invoice"), "Supplier Payment": t("create_supplier_payment"), "Client Contact": t("create_contact"), Appointment: t("create_appointment"), "CRM Deal": t("create_crm_deal"), "Insurance Agent": t("create_insurance_agent"), "Credit Type": t("create_credit_type"), "Credit Package": t("create_credit_package"), "Credit Charge": t("create_credit_charge"), "Credit Usage": t("create_credit_usage"), Product: t("create_product"), Warehouse: t("create_warehouse"), "Price List": t("create_price_list"), "Price List Rule": t("create_price_list_rule"), "Stock Entry": t("create_stock_entry"), Stocktaking: t("create_stocktaking"), Requisition: t("create_requisition"), Booking: t("create_booking"), "Time Entry": t("create_time_entry"), "Sales Invoice": t("create_invoice"), "Sales Quotation": t("create_quotation"), "Invoice Payment": t("create_payment"), "Recurring Invoice": t("create_recurring_invoice"), "Daftra Project": t("create_project") }[document?.doctype] || t("create_record")), [document?.doctype, t]);
 
   useEffect(() => {
     if (!document?.doctype) return;
@@ -135,9 +135,21 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
                 const source = workspace.options?.[field.options_key] || [];
                 const options = field.options_key === "clients"
                   ? source.map((row) => ({ value: row.name, label: row.business_name || row.first_name || row.name, description: row.tax_id || "" }))
-                  : field.options_key === "invoices"
-                    ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.client || ""} · ${row.balance || row.total || 0}` }))
-                    : field.options_key === "credit_types"
+                  : field.options_key === "suppliers"
+                    ? source.map((row) => ({ value: row.name, label: row.supplier_name || row.name, description: row.phone || row.email || "" }))
+                    : field.options_key === "invoices"
+                      ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.client || ""} · ${row.balance || row.total || 0}` }))
+                      : field.options_key === "purchase_invoices"
+                        ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.supplier || ""} · ${row.total || 0}` }))
+                        : field.options_key === "purchase_quotations"
+                          ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.supplier || ""} · ${row.total || 0}` }))
+                          : field.options_key === "purchase_orders"
+                            ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.supplier || ""} · ${row.total || 0}` }))
+                            : field.options_key === "purchase_requests"
+                              ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.request_date || ""} · ${row.status || ""}` }))
+                              : field.options_key === "sales_quotations"
+                                ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.client || ""} · ${row.total || 0}` }))
+                                : field.options_key === "credit_types"
                       ? source.map((row) => ({ value: row.name, label: row.type_name || row.name, description: `${row.unit_label || "Credits"} · ${row.default_credits || 0}` }))
                       : field.options_key === "credit_packages"
                         ? source.map((row) => ({ value: row.name, label: row.package_name || row.name, description: `${row.credits || 0} · ${row.price || 0}` }))
