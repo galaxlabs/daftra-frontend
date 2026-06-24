@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { LogOutIcon } from "lucide-react";
+import { LoaderCircleIcon, LogOutIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppHeader } from "@/components/app/app-header";
@@ -28,6 +28,22 @@ function formatMoney(value, currency, language) {
   return new Intl.NumberFormat(language === "ar" ? "ar-EG" : "en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(Number(value || 0));
 }
 
+function pushToast(payload) {
+  if (!payload) return;
+  if (typeof payload === "string") {
+    toast(payload);
+    return;
+  }
+  const type = payload.type || "message";
+  const message = payload.message || "";
+  const description = payload.description;
+  if (typeof toast[type] === "function") {
+    toast[type](message, description ? { description } : undefined);
+  } else {
+    toast(message, description ? { description } : undefined);
+  }
+}
+
 export default function App() {
   const [boot, setBoot] = useState(DEFAULT_BOOT);
   const [activeTab, setActiveTab] = useState("Workflow Studio");
@@ -38,6 +54,7 @@ export default function App() {
   const [showWizard, setShowWizard] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [language, setLanguage] = useLocalString("daftra-language", "en");
+  const [authReady, setAuthReady] = useState(false);
 
   const normalizedLanguage = normalizeLanguage(language);
   const t = useMemo(() => createTranslator(normalizedLanguage), [normalizedLanguage]);
@@ -66,11 +83,24 @@ export default function App() {
   }, [normalizedLanguage]);
 
   useEffect(() => {
+    let cancelled = false;
     getSession().then((current) => {
+      if (cancelled) return;
       setSession(current);
-      if (current) load();
-      else setConnect(true);
-    }).catch(() => setConnect(true));
+      if (current) {
+        load().finally(() => !cancelled && setAuthReady(true));
+      } else {
+        setConnect(true);
+        setAuthReady(true);
+      }
+    }).catch(() => {
+      if (cancelled) return;
+      setConnect(true);
+      setAuthReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -81,8 +111,8 @@ export default function App() {
   }, [boot.setup, session, setLanguage]);
 
   useEffect(() => {
-    if (activeTab !== "Print Studio") {
-      if (moduleDocuments.length) setSelectedDocument(moduleDocuments[0]);
+    if (activeTab !== "Print Studio" && moduleDocuments.length) {
+      setSelectedDocument(moduleDocuments[0]);
     }
   }, [activeTab, moduleDocuments]);
 
@@ -90,7 +120,7 @@ export default function App() {
     try {
       setBoot(await call("daftra.api.business_cycle.get_frontend_boot"));
     } catch (error) {
-      toast.error(error.message);
+      pushToast({ type: "error", message: error.message });
       if (String(error.message).toLowerCase().includes("sign")) setConnect(true);
     }
   }
@@ -98,6 +128,7 @@ export default function App() {
   async function signedIn() {
     const current = await getSession();
     setSession(current);
+    setConnect(false);
     await load();
   }
 
@@ -110,7 +141,7 @@ export default function App() {
 
   async function saveSetup(payload) {
     await saveFrontendSetup(payload);
-    toast.success(t("save_setup"));
+    pushToast({ type: "success", message: t("save_setup") });
     setShowWizard(false);
     await load();
   }
@@ -118,17 +149,35 @@ export default function App() {
   async function runScenario(key) {
     const methods = { seed: "seed_demo_data", lead_to_cash: "run_sales_cycle", procure_to_stock: "run_purchase_cycle", service_job: "run_service_cycle", validate: "validate_business_cycle" };
     const method = methods[key];
-    if (!method) return toast.message("Guided scenario only.");
+    if (!method) return pushToast("Guided scenario only.");
     try {
       const result = await call(`daftra.api.business_cycle.${method}`, { mutation: key !== "validate" });
-      toast.success(key === "validate" ? "Business-cycle validation passed." : "Scenario completed successfully.");
+      pushToast({ type: "success", message: key === "validate" ? "Business-cycle validation passed." : "Scenario completed successfully." });
       if (key === "service_job") setActiveTab("Bookings");
       await load();
       return result;
     } catch (error) {
-      toast.error(error.message);
+      pushToast({ type: "error", message: error.message });
       return null;
     }
+  }
+
+  function jumpToWorkspaceDocument(doctype) {
+    const target = workspaceCatalog.find((item) => item.doctype === doctype);
+    if (!target) return;
+    setSelectedDocument(target);
+    setActiveTab(target.module);
+  }
+
+  if (!authReady) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,rgba(135,201,118,0.12),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.7),rgba(248,250,248,1))] px-6">
+        <div className="flex items-center gap-3 rounded-3xl border border-border/70 bg-card px-6 py-5 shadow-sm">
+          <LoaderCircleIcon className="size-5 animate-spin text-primary" />
+          <div className="text-sm font-medium text-foreground">{t("loading")}</div>
+        </div>
+      </div>
+    );
   }
 
   const activeTabLabel = moduleLabel(activeTab, normalizedLanguage);
@@ -155,13 +204,13 @@ export default function App() {
           <ScrollArea className="h-[calc(100vh-9rem)] pe-2">
             <div className="pb-10">
               {activeTab === "Workflow Studio" ? (
-                <WorkflowPage boot={boot} t={t} notify={(message) => toast(message)} onOpenPrintStudio={(doc) => { setSelectedDocument(doc || null); setActiveTab("Print Studio"); }} />
+                <WorkflowPage boot={boot} t={t} notify={pushToast} onOpenPrintStudio={(doc) => { setSelectedDocument(doc || null); setActiveTab("Print Studio"); }} />
               ) : activeTab === "Print Studio" ? (
-                <PrintPage initialDocument={printDocument} t={t} notify={(message) => toast(message)} onReturn={() => setActiveTab("Sales")} />
+                <PrintPage initialDocument={printDocument} t={t} notify={pushToast} onReturn={() => setActiveTab("Sales")} />
               ) : currentDocument ? (
                 <div className="grid gap-6">
                   <DashboardPage boot={boot} currencyNode={currencyNode} t={t} activeTabLabel={activeTabLabel} moduleDocuments={moduleDocuments} selectedDocument={currentDocument} onSelectDocument={setSelectedDocument} onOpenPrintStudio={(doc) => { setSelectedDocument(doc || currentDocument); setActiveTab("Print Studio"); }} onRunScenario={runScenario} />
-                  <WorkspacePage document={workspaceDocument} t={t} notify={(message) => toast(message)} onOpenPrintStudio={(doc) => { setSelectedDocument(doc); setActiveTab("Print Studio"); }} />
+                  <WorkspacePage document={workspaceDocument} t={t} notify={pushToast} onOpenPrintStudio={(doc) => { setSelectedDocument(doc); setActiveTab("Print Studio"); }} onJumpToDocument={jumpToWorkspaceDocument} />
                 </div>
               ) : null}
             </div>
