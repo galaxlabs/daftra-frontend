@@ -5,7 +5,6 @@ import {
   CalendarDays,
   CircleDollarSign,
   Clock3,
-  FileText,
   Gauge,
   LayoutGrid,
   Printer,
@@ -42,16 +41,16 @@ const icons = {
 
 export function AppSidebar({ navigation, activeTab, onSelect, language, enabledModules, companyName, businessType }) {
   return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+    <aside className="flex h-screen min-h-screen flex-col overflow-hidden bg-sidebar text-sidebar-foreground md:h-full md:min-h-0">
       <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-5">
-        <div className="grid size-12 place-items-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">D</div>
-        <div className="grid gap-0.5">
-          <strong className="text-base font-semibold">Daftra</strong>
-          <span className="text-xs text-sidebar-foreground/70">Galaxy Labs Clone</span>
+        <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">D</div>
+        <div className="min-w-0 space-y-0.5 text-start">
+          <strong className="block truncate text-base font-semibold">Daftra</strong>
+          <span className="block truncate text-xs text-sidebar-foreground/70">Galaxy Labs Clone</span>
         </div>
       </div>
-      <ScrollArea className="flex-1 px-3 py-4">
-        <div className="grid gap-1">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="grid gap-1 px-3 py-4 text-start">
           {navigation.map((name) => {
             const Icon = icons[name] || LayoutGrid;
             const isActive = activeTab === name;
@@ -59,10 +58,12 @@ export function AppSidebar({ navigation, activeTab, onSelect, language, enabledM
               <Button
                 key={name}
                 variant={isActive ? "secondary" : "ghost"}
-                className={cn("h-12 justify-start gap-3 rounded-2xl px-4", !isActive && "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}
-                onClick={() => onSelect(name)}
-              >
-                <Icon data-icon="inline-start" />
+                className={cn(
+                  "h-12 justify-start gap-3 rounded-2xl px-4 text-start",
+                  !isActive && "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                onClick={() => onSelect(name)}>
+                <Icon className="shrink-0" data-icon="inline-start" />
                 <span className="flex-1 truncate text-sm">{moduleLabel(name, language)}</span>
                 {enabledModules?.[name] === 0 ? <Badge variant="outline">Off</Badge> : null}
               </Button>
@@ -71,11 +72,11 @@ export function AppSidebar({ navigation, activeTab, onSelect, language, enabledM
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border px-5 py-4">
-        <div className="rounded-2xl bg-sidebar-accent px-4 py-3">
+        <div className="rounded-2xl bg-sidebar-accent px-4 py-3 text-start">
           <div className="truncate text-sm font-medium">{companyName || "Daftra ERP"}</div>
           <div className="truncate text-xs text-sidebar-foreground/70">{businessType || "Frontend-only navigation"}</div>
         </div>
       </div>
-    </div>
+    </aside>
   );
 }
