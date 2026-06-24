@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   Users,
   Building2,
+  BriefcaseBusiness,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,7 @@ const icons = {
   POS: CircleDollarSign,
   Bookings: CalendarDays,
   "Time Tracking": Clock3,
+  Projects: BriefcaseBusiness,
   Tax: ShieldCheck,
   Settings,
   "Print Studio": Printer,

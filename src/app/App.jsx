@@ -116,7 +116,7 @@ export default function App() {
   }
 
   async function runScenario(key) {
-    const methods = { seed: "seed_demo_data", lead_to_cash: "run_sales_cycle", procure_to_stock: "run_purchase_cycle", service_job: "seed_demo_data", validate: "validate_business_cycle" };
+    const methods = { seed: "seed_demo_data", lead_to_cash: "run_sales_cycle", procure_to_stock: "run_purchase_cycle", service_job: "run_service_cycle", validate: "validate_business_cycle" };
     const method = methods[key];
     if (!method) return toast.message("Guided scenario only.");
     try {

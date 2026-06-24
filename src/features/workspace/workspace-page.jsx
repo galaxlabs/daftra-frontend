@@ -23,7 +23,7 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({});
 
-  const createTitle = useMemo(() => ({ Client: t("create_client"), Product: t("create_product"), Booking: t("create_booking"), "Time Entry": t("create_time_entry"), "Sales Invoice": t("create_invoice"), "Sales Quotation": t("create_quotation"), "Invoice Payment": t("create_payment"), "Recurring Invoice": t("create_recurring_invoice") }[document?.doctype] || t("create_record")), [document?.doctype, t]);
+  const createTitle = useMemo(() => ({ Client: t("create_client"), "Client Contact": t("create_contact"), Appointment: t("create_appointment"), "CRM Deal": t("create_crm_deal"), "Insurance Agent": t("create_insurance_agent"), "Credit Type": t("create_credit_type"), "Credit Package": t("create_credit_package"), "Credit Charge": t("create_credit_charge"), "Credit Usage": t("create_credit_usage"), Product: t("create_product"), Warehouse: t("create_warehouse"), "Price List": t("create_price_list"), "Price List Rule": t("create_price_list_rule"), "Stock Entry": t("create_stock_entry"), Stocktaking: t("create_stocktaking"), Requisition: t("create_requisition"), Booking: t("create_booking"), "Time Entry": t("create_time_entry"), "Sales Invoice": t("create_invoice"), "Sales Quotation": t("create_quotation"), "Invoice Payment": t("create_payment"), "Recurring Invoice": t("create_recurring_invoice"), "Daftra Project": t("create_project") }[document?.doctype] || t("create_record")), [document?.doctype, t]);
 
   useEffect(() => {
     if (!document?.doctype) return;
@@ -137,11 +137,30 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
                   ? source.map((row) => ({ value: row.name, label: row.business_name || row.first_name || row.name, description: row.tax_id || "" }))
                   : field.options_key === "invoices"
                     ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.client || ""} · ${row.balance || row.total || 0}` }))
-                    : source.map((row) => ({ value: row.name, label: row.product_name || row.product_code || row.name, description: `${row.product_type || ""} · ${row.selling_price || 0}` }));
+                    : field.options_key === "credit_types"
+                      ? source.map((row) => ({ value: row.name, label: row.type_name || row.name, description: `${row.unit_label || "Credits"} · ${row.default_credits || 0}` }))
+                      : field.options_key === "credit_packages"
+                        ? source.map((row) => ({ value: row.name, label: row.package_name || row.name, description: `${row.credits || 0} · ${row.price || 0}` }))
+                        : field.options_key === "insurance_agents"
+                          ? source.map((row) => ({ value: row.name, label: row.agent_name || row.name, description: row.email || "" }))
+                          : field.options_key === "users"
+                            ? source.map((row) => ({ value: row.name, label: row.full_name || row.email || row.name, description: row.email || "" }))
+                            : field.options_key === "employees"
+                              ? source.map((row) => ({ value: row.name, label: row.employee_name || row.employee_id || row.name, description: row.email || "" }))
+                              : field.options_key === "projects"
+                                ? source.map((row) => ({ value: row.name, label: row.project_name || row.project_code || row.name, description: `${row.project_code || ""} · ${row.status || ""}` }))
+                                : field.options_key === "warehouses"
+                                  ? source.map((row) => ({ value: row.name, label: row.warehouse_name || row.name, description: `${row.location || ""} · ${row.status || ""}` }))
+                                  : field.options_key === "price_lists"
+                                    ? source.map((row) => ({ value: row.name, label: row.price_list_name || row.name, description: `${row.currency || ""}${row.is_default ? " · Default" : ""}` }))
+                                    : source.map((row) => ({ value: row.name, label: row.product_name || row.product_code || row.name, description: `${row.product_type || row.credit_type || row.price_list_name || ""} · ${row.selling_price || row.price || 0}` }));
                 return <SearchSelect key={field.fieldname} label={field.label} value={value} onChange={(next) => setForm({ ...form, [field.fieldname]: next })} options={options} placeholder={field.label} />;
               }
               if (field.type === "Select") {
                 return <SearchSelect key={field.fieldname} label={field.label} value={value} onChange={(next) => setForm({ ...form, [field.fieldname]: next })} options={(field.options || []).map((option) => ({ value: option, label: option }))} placeholder={field.label} />;
+              }
+              if (field.type === "Check") {
+                return <label key={field.fieldname} className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background px-4 py-3 text-sm font-medium"><input type="checkbox" checked={Boolean(value)} onChange={(event) => setForm({ ...form, [field.fieldname]: event.target.checked ? 1 : 0 })} className="size-4 rounded border-border text-primary focus:ring-primary" />{field.label}</label>;
               }
               if (field.type === "Text") {
                 return <label key={field.fieldname} className="grid gap-2 text-sm font-medium">{field.label}<Textarea value={value} onChange={(event) => setForm({ ...form, [field.fieldname]: event.target.value })} className="min-h-28 rounded-3xl" /></label>;
