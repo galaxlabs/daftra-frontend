@@ -42,8 +42,22 @@ export default function App() {
   const normalizedLanguage = normalizeLanguage(language);
   const t = useMemo(() => createTranslator(normalizedLanguage), [normalizedLanguage]);
   const navigation = useMemo(() => ["Workflow Studio", ...Object.keys(boot.modules || {}), "Print Studio"], [boot.modules]);
-  const filteredDocs = useMemo(() => (boot.document_catalog || []).filter((item) => item.doctype.toLowerCase().includes(search.toLowerCase()) || item.module.toLowerCase().includes(search.toLowerCase())), [boot.document_catalog, search]);
+  const workspaceCatalog = useMemo(() => {
+    const baseDocs = (boot.document_catalog || []).filter((item) => !(item.module === "Sales" && ["Sales Invoice", "Sales Quotation", "Invoice Payment", "Recurring Invoice"].includes(item.doctype)));
+    const salesViews = [
+      { module: "Sales", doctype: "Sales Invoice", label: "Invoices", view_key: "sales_invoices", route: "sales-invoices", templates: ["Default Invoice", "TAX Invoice", "Receipt", "Materials & Services"], has_print: true },
+      { module: "Sales", doctype: "Sales Invoice", label: "Credit Notes", view_key: "credit_notes", route: "credit-notes", templates: ["Default Invoice", "TAX Invoice"], has_print: true },
+      { module: "Sales", doctype: "Sales Invoice", label: "Refund Receipts", view_key: "refund_receipts", route: "refund-receipts", templates: ["Receipt"], has_print: true },
+      { module: "Sales", doctype: "Sales Quotation", label: "Quotations", view_key: "sales_quotations", route: "sales-quotations", templates: ["Quotation"], has_print: true },
+      { module: "Sales", doctype: "Invoice Payment", label: "Client Payments", view_key: "invoice_payments", route: "invoice-payments", templates: ["Receipt"], has_print: true },
+      { module: "Sales", doctype: "Recurring Invoice", label: "Recurring Invoices", view_key: "recurring_invoices", route: "recurring-invoices", templates: [], has_print: false },
+    ];
+    return [...salesViews, ...baseDocs];
+  }, [boot.document_catalog]);
+  const filteredDocs = useMemo(() => workspaceCatalog.filter((item) => (item.label || item.doctype).toLowerCase().includes(search.toLowerCase()) || item.doctype.toLowerCase().includes(search.toLowerCase()) || item.module.toLowerCase().includes(search.toLowerCase())), [workspaceCatalog, search]);
   const currentDocument = useMemo(() => selectedDocument || filteredDocs[0] || null, [selectedDocument, filteredDocs]);
+  const moduleDocuments = useMemo(() => filteredDocs.filter((item) => item.module === activeTab), [filteredDocs, activeTab]);
+  const printDocument = useMemo(() => (boot.document_catalog || []).find((item) => item.doctype === currentDocument?.doctype) || currentDocument, [boot.document_catalog, currentDocument]);
   const currencyNode = useMemo(() => formatMoney(boot.stats.total_invoice_amount, boot.setup?.default_currency || "SAR", normalizedLanguage), [boot.stats.total_invoice_amount, boot.setup?.default_currency, normalizedLanguage]);
 
   useEffect(() => {
@@ -68,10 +82,9 @@ export default function App() {
 
   useEffect(() => {
     if (activeTab !== "Print Studio") {
-      const moduleDocs = filteredDocs.filter((item) => item.module === activeTab);
-      if (moduleDocs.length) setSelectedDocument(moduleDocs[0]);
+      if (moduleDocuments.length) setSelectedDocument(moduleDocuments[0]);
     }
-  }, [activeTab, filteredDocs]);
+  }, [activeTab, moduleDocuments]);
 
   async function load() {
     try {
@@ -144,10 +157,10 @@ export default function App() {
               {activeTab === "Workflow Studio" ? (
                 <WorkflowPage boot={boot} t={t} notify={(message) => toast(message)} onOpenPrintStudio={(doc) => { setSelectedDocument(doc || null); setActiveTab("Print Studio"); }} />
               ) : activeTab === "Print Studio" ? (
-                <PrintPage initialDocument={currentDocument} t={t} notify={(message) => toast(message)} onReturn={() => setActiveTab("Sales")} />
+                <PrintPage initialDocument={printDocument} t={t} notify={(message) => toast(message)} onReturn={() => setActiveTab("Sales")} />
               ) : currentDocument ? (
                 <div className="grid gap-6">
-                  <DashboardPage boot={boot} currencyNode={currencyNode} t={t} activeTabLabel={activeTabLabel} selectedDocument={currentDocument} onSelectDocument={setSelectedDocument} onOpenPrintStudio={(doc) => { setSelectedDocument(doc || currentDocument); setActiveTab("Print Studio"); }} onRunScenario={runScenario} />
+                  <DashboardPage boot={boot} currencyNode={currencyNode} t={t} activeTabLabel={activeTabLabel} moduleDocuments={moduleDocuments} selectedDocument={currentDocument} onSelectDocument={setSelectedDocument} onOpenPrintStudio={(doc) => { setSelectedDocument(doc || currentDocument); setActiveTab("Print Studio"); }} onRunScenario={runScenario} />
                   <WorkspacePage document={workspaceDocument} t={t} notify={(message) => toast(message)} onOpenPrintStudio={(doc) => { setSelectedDocument(doc); setActiveTab("Print Studio"); }} />
                 </div>
               ) : null}

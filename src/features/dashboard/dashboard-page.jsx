@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { StatCard } from "@/components/shared/stat-card";
 
-export function DashboardPage({ boot, currencyNode, t, activeTabLabel, selectedDocument, onSelectDocument, onOpenPrintStudio, onRunScenario }) {
+export function DashboardPage({ boot, currencyNode, t, activeTabLabel, moduleDocuments, selectedDocument, onSelectDocument, onOpenPrintStudio, onRunScenario }) {
   const printableDocs = (boot.document_catalog || []).filter((item) => item.templates.length > 0);
   const stats = [
     { label: t("revenue"), value: currencyNode, hint: "Live backend totals", icon: CircleDollarSignIcon },
@@ -74,11 +74,11 @@ export function DashboardPage({ boot, currencyNode, t, activeTabLabel, selectedD
             <CardDescription>{t("records_and_actions")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
-            {(boot.document_catalog || []).slice(0, 8).map((document) => (
-              <button key={`${document.module}-${document.doctype}`} type="button" onClick={() => onSelectDocument(document)} className={`rounded-3xl border p-4 text-start transition hover:border-primary/30 hover:bg-muted/40 ${selectedDocument?.doctype === document.doctype ? "border-primary/30 bg-muted/50" : "border-border/70 bg-background"}`}>
+            {(moduleDocuments || []).slice(0, 8).map((document) => (
+              <button key={`${document.module}-${document.label || document.doctype}`} type="button" onClick={() => onSelectDocument(document)} className={`rounded-3xl border p-4 text-start transition hover:border-primary/30 hover:bg-muted/40 ${selectedDocument?.view_key === document.view_key || (!document.view_key && selectedDocument?.doctype === document.doctype) ? "border-primary/30 bg-muted/50" : "border-border/70 bg-background"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold">{document.doctype}</div>
+                    <div className="text-sm font-semibold">{document.label || document.doctype}</div>
                     <div className="mt-1 text-xs text-muted-foreground">{document.module}</div>
                   </div>
                   <ArrowUpRightIcon className="text-muted-foreground" />
@@ -96,7 +96,7 @@ export function DashboardPage({ boot, currencyNode, t, activeTabLabel, selectedD
               <CardDescription>{printableDocs.length} printable documents available in the frontend.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {printableDocs.slice(0, 10).map((document) => <Badge key={document.doctype} variant="outline">{document.doctype}</Badge>)}
+              {printableDocs.slice(0, 10).map((document) => <Badge key={document.label || document.doctype} variant="outline">{document.label || document.doctype}</Badge>)}
               <Button variant="outline" className="ms-auto rounded-2xl" onClick={() => onOpenPrintStudio(selectedDocument)}>
                 <PrinterIcon data-icon="inline-start" />
                 {t("open_print_studio")}

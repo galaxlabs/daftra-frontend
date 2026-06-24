@@ -23,34 +23,34 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({});
 
-  const createTitle = useMemo(() => ({ Client: t("create_client"), Product: t("create_product"), Booking: t("create_booking"), "Time Entry": t("create_time_entry"), "Sales Invoice": t("create_invoice") }[document?.doctype] || t("create_record")), [document?.doctype, t]);
+  const createTitle = useMemo(() => ({ Client: t("create_client"), Product: t("create_product"), Booking: t("create_booking"), "Time Entry": t("create_time_entry"), "Sales Invoice": t("create_invoice"), "Sales Quotation": t("create_quotation"), "Invoice Payment": t("create_payment"), "Recurring Invoice": t("create_recurring_invoice") }[document?.doctype] || t("create_record")), [document?.doctype, t]);
 
   useEffect(() => {
     if (!document?.doctype) return;
     setWorkspace(null);
     setDetail(null);
     setSearch("");
-    loadWorkspace(document.doctype, "");
-  }, [document?.doctype]);
+    loadWorkspace(document.doctype, document.view_key, "");
+  }, [document?.doctype, document?.view_key]);
 
-  async function loadWorkspace(doctype, term) {
+  async function loadWorkspace(doctype, viewKey, term) {
     try {
-      const result = await call("daftra.api.business_cycle.get_frontend_workspace", { args: { doctype, search: term, limit: 25 } });
+      const result = await call("daftra.api.business_cycle.get_frontend_workspace", { args: { doctype, view_key: viewKey, search: term, limit: 25 } });
       setWorkspace(result);
       const blank = {};
       (result.create_fields || []).forEach((field) => { blank[field.fieldname] = ""; });
       setForm(blank);
       if (result.records?.[0]) {
-        loadDetail(doctype, result.records[0].name);
+        loadDetail(doctype, viewKey, result.records[0].name);
       }
     } catch (error) {
       notify(error.message);
     }
   }
 
-  async function loadDetail(doctype, name) {
+  async function loadDetail(doctype, viewKey, name) {
     try {
-      setDetail(await call("daftra.api.business_cycle.get_frontend_record", { args: { doctype, name } }));
+      setDetail(await call("daftra.api.business_cycle.get_frontend_record", { args: { doctype, view_key: viewKey, name } }));
     } catch (error) {
       notify(error.message);
     }
@@ -64,10 +64,10 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
       (workspace.create_fields || []).forEach((field) => {
         if (numericTypes.has(field.type) && payload[field.fieldname] !== "") payload[field.fieldname] = Number(payload[field.fieldname]);
       });
-      const created = await call("daftra.api.business_cycle.create_frontend_workspace_record", { mutation: true, args: { doctype: workspace.doctype, payload } });
+      const created = await call("daftra.api.business_cycle.create_frontend_workspace_record", { mutation: true, args: { doctype: workspace.doctype, view_key: document.view_key, payload } });
       notify(`${t("created_successfully")} ${created.name}`);
-      await loadWorkspace(workspace.doctype, search);
-      await loadDetail(workspace.doctype, created.name);
+      await loadWorkspace(workspace.doctype, document.view_key, search);
+      await loadDetail(workspace.doctype, document.view_key, created.name);
     } catch (error) {
       notify(error.message);
     } finally {
@@ -83,12 +83,12 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
     <Card className="rounded-[2rem] border-0 shadow-sm ring-1 ring-border/60">
       <CardHeader className="flex flex-row items-center justify-between gap-4">
         <div>
-          <CardTitle>{document.doctype}</CardTitle>
+          <CardTitle>{document.label || document.doctype}</CardTitle>
           <CardDescription>{document.module}</CardDescription>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="rounded-2xl" onClick={() => onOpenPrintStudio(document)}><ArrowUpRightIcon data-icon="inline-start" />{t("open_print_studio")}</Button>
-          <Button variant="outline" size="icon" className="rounded-2xl" onClick={() => loadWorkspace(document.doctype, search)}><RefreshCwIcon /></Button>
+          <Button variant="outline" size="icon" className="rounded-2xl" onClick={() => loadWorkspace(document.doctype, document.view_key, search)}><RefreshCwIcon /></Button>
         </div>
       </CardHeader>
       <CardContent className="grid gap-4 xl:grid-cols-[0.8fr_1fr_0.9fr]">
@@ -98,11 +98,11 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
             <CardDescription>{workspace?.records?.length || 0} rows</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <Input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => event.key === "Enter" ? loadWorkspace(document.doctype, event.currentTarget.value) : null} placeholder={t("search_workspace")} className="rounded-2xl" />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => event.key === "Enter" ? loadWorkspace(document.doctype, document.view_key, event.currentTarget.value) : null} placeholder={t("search_workspace")} className="rounded-2xl" />
             <ScrollArea className="h-[28rem]">
               <div className="grid gap-2">
                 {(workspace?.records || []).map((record) => (
-                  <button key={record.name} type="button" className={`rounded-2xl border px-4 py-3 text-start ${detail?.name === record.name ? "border-primary/30 bg-background" : "border-border/60 bg-background/80"}`} onClick={() => loadDetail(workspace.doctype, record.name)}>
+                  <button key={record.name} type="button" className={`rounded-2xl border px-4 py-3 text-start ${detail?.name === record.name ? "border-primary/30 bg-background" : "border-border/60 bg-background/80"}`} onClick={() => loadDetail(workspace.doctype, document.view_key, record.name)}>
                     <div className="text-sm font-semibold">{record.title || record.name}</div>
                     <div className="mt-1 text-xs text-muted-foreground">{record.subtitle || record.name}</div>
                   </button>
@@ -135,7 +135,9 @@ export function WorkspacePage({ document, t, notify, onOpenPrintStudio }) {
                 const source = workspace.options?.[field.options_key] || [];
                 const options = field.options_key === "clients"
                   ? source.map((row) => ({ value: row.name, label: row.business_name || row.first_name || row.name, description: row.tax_id || "" }))
-                  : source.map((row) => ({ value: row.name, label: row.product_name || row.product_code || row.name, description: `${row.product_type || ""} · ${row.selling_price || 0}` }));
+                  : field.options_key === "invoices"
+                    ? source.map((row) => ({ value: row.name, label: row.name, description: `${row.client || ""} · ${row.balance || row.total || 0}` }))
+                    : source.map((row) => ({ value: row.name, label: row.product_name || row.product_code || row.name, description: `${row.product_type || ""} · ${row.selling_price || 0}` }));
                 return <SearchSelect key={field.fieldname} label={field.label} value={value} onChange={(next) => setForm({ ...form, [field.fieldname]: next })} options={options} placeholder={field.label} />;
               }
               if (field.type === "Select") {
